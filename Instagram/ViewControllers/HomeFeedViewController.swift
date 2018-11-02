@@ -10,128 +10,70 @@ import UIKit
 import Parse
 import ParseUI
 
-class HomeFeedViewController: UIViewController {
-
-    @IBOutlet weak var activityIndicator: UIActivityIndicatorView!
-    @IBOutlet weak var collectionView: UICollectionView!
-    @IBAction func logoutButton(_ sender: Any) {
-        // Logout the current user
-        
-        PFUser.logOutInBackground(block: { (error) in
-            if let error = error {
-                print(error.localizedDescription)
-            } else {
-                let user = PFUser.current() ?? nil
-                print("Successful logout")
-                print(user as Any)
-                
-                self.performSegue(withIdentifier: "logoutSegue", sender: nil)
+class HomeFeedViewController: UIViewController, UITableViewDataSource, UITableViewDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate{
+   
+    var posts : [PFObject] = []
+    var refreshControl: UIRefreshControl!
+    var photo: UIImage?
+    
+    @IBOutlet weak var tableView: UITableView!
+    
+    @IBAction func cameraButton(_ sender: Any) {
+        let imageVC = UIImagePickerController()
+        imageVC.delegate = self
+        imageVC.allowsEditing = true
+        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+            print("Camera is available 📸")
+            imageVC.sourceType = .camera
+        } else {
+            print("Camera 🚫 available so we will use photo library instead")
+            imageVC.sourceType = .photoLibrary
+        }
+        self.present(imageVC, animated: true, completion: nil)
+    }
+    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [String : Any]) {
+        let previewImage = info[UIImagePickerControllerEditedImage] as! UIImage?
+        photo = previewImage
+        dismiss(animated: true, completion: nil)
+        performSegue(withIdentifier: "tagSegue", sender: self)
+    }
+    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
+        // Get the new view controller using segue.destinationViewController.
+        // Pass the selected object to the new view controller.
+        if segue.identifier == "tagSegue" {
+            let vc: ComposeViewController = segue.destination as! ComposeViewController
+            vc.preview = photo
+        } else if segue.identifier == "detailSegue" {
+            let cell = sender as! UITableViewCell
+            if let indexPath = tableView.indexPath(for: cell){
+                let post = posts[indexPath.row]
+                let detailViewController = segue.destination as! PostDetailViewController
+                detailViewController.post = post
             }
             
-        })
+        }
     }
     
-    var posts : [Post] = []
-    var raw_posts: [PFObject] = []
+    
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        // Do any additional setup after loading the view.
+        tableView.dataSource = self
+        tableView.delegate = self
+        tableView.rowHeight = UITableViewAutomaticDimension
+        tableView.estimatedRowHeight = 250
         
-        // edit navbar        
-        if let navigationBar = navigationController?.navigationBar {
-            navigationBar.tintColor = UIColor(red: 1.0, green: 0.25, blue: 0.25, alpha: 0.8)
-            
-            let shadow = NSShadow()
-            shadow.shadowColor = UIColor.gray.withAlphaComponent(0.5)
-            shadow.shadowOffset = CGSize(width: 2, height: 2)
-            
-            shadow.shadowBlurRadius = 4
-            
-            navigationBar.titleTextAttributes = [
-                NSAttributedStringKey.font : UIFont.boldSystemFont(ofSize: 22),
-                NSAttributedStringKey.foregroundColor : UIColor(red: 0.5, green: 0.15, blue: 0.15, alpha: 0.8),
-                NSAttributedStringKey.shadow : shadow
-            ]
-        }
+        refreshControl = UIRefreshControl()
+        refreshControl.addTarget(self, action: #selector(HomeFeedViewController.didPullToRefresh(_:)), for: .valueChanged)
+        tableView.insertSubview(refreshControl, at: 0)
         
-        // For collection View
-        collectionView.dataSource = self as? UICollectionViewDataSource
-        collectionView.delegate = self as? UICollectionViewDelegate
         
-        // update flow layout
-        let layout = collectionView.collectionViewLayout as! UICollectionViewFlowLayout
-        
-        let cellsPerLine:CGFloat = 1
-        let widthOfEachItem = self.view.frame.size.width / cellsPerLine
-        layout.itemSize = CGSize(width: widthOfEachItem, height: widthOfEachItem * 1.75)
-        layout.minimumInteritemSpacing = 0
-        layout.minimumLineSpacing = 4
-        
-        // Initialize a UIRefreshControl
-        let refreshControl = UIRefreshControl()
-        refreshControl.addTarget(self, action: #selector(refreshControlAction(_:)), for: UIControlEvents.valueChanged)
-        // add refresh control to table view
-        self.collectionView.insertSubview(refreshControl, at: 0)
+        postFetch()
     }
     
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(true)
-        
-        activityIndicator.startAnimating()
-        
-        getData(completion: {(success: Bool, error: Error?) -> Void in
-            self.activityIndicator.stopAnimating()
-            
-            if success {
-                print ("successfully received data")
-                
-            } else {
-                print (error?.localizedDescription ?? "no error")
-            }
-        })
-    }
-    
-    // Makes a network request to get updated data
-    // Updates the tableView with the new data
-    // Hides the RefreshControl
-    @objc func refreshControlAction(_ refreshControl: UIRefreshControl) {
-        
-        getData(completion: {(success: Bool, error: Error?) -> Void in
-            
-            if success {
-                print ("successfully received data")
-                
-                // Tell the refreshControl to stop spinning
-                refreshControl.endRefreshing()
-            } else {
-                print (error?.localizedDescription ?? "no error")
-            }
-        })
-    }
-    
-    func getData(completion: @escaping (_ success: Bool, _ error: Error?) -> Void) -> Void {
-        let query = PFQuery(className: "Post")
-        query.order(byDescending: "createdAt")
-        query.includeKey("author")
-        query.limit = 20
-        
-        // fetch data asynchronously
-        query.findObjectsInBackground { (posts: [PFObject]?, error: Error?) -> Void in
-            if let posts = posts {
-                print("Posts are: ", posts)
-                // do something with the data fetched
-                self.raw_posts = posts
-                completion(true, nil)
-                
-            } else {
-                print("Error! : ", error?.localizedDescription ?? "No localized description for error")
-                // handle error
-                completion(false, error)
-            }
-            self.collectionView.reloadData()
-        }
+    @objc func didPullToRefresh(_ refreshControll: UIRefreshControl){
+        postFetch()
     }
     
     override func didReceiveMemoryWarning() {
@@ -139,20 +81,41 @@ class HomeFeedViewController: UIViewController {
         // Dispose of any resources that can be recreated.
     }
     
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+    }
+    
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: "HomeFeedCell", for: indexPath) as! HomeFeedCell
+        cell.post = posts[indexPath.row]
+        
+        return cell
+    }
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        return posts.count
+    }
     
     
-    /*
-     // MARK: - Navigation
-     
-     // In a storyboard-based application, you will often want to do a little preparation before navigation
-     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
-     // Get the new view controller using segue.destinationViewController.
-     // Pass the selected object to the new view controller.
-     }
-     */
+    func postFetch(){
+        let query = Post.query()
+        query?.order(byDescending: "createdAt")
+        query?.includeKey("author")
+        query?.limit = 20
+        
+        // fetch data asynchronously
+        query?.findObjectsInBackground { (posts: [PFObject]?, error: Error?) -> Void in
+            if let posts = posts {
+                print("Posts are: ", posts)
+                // do something with the data fetched
+                self.posts = posts
+                
+            } else {
+                print("Error! : ", error?.localizedDescription ?? "No localized description for error")
+            }
+            self.tableView.reloadData()
+        }
+        self.refreshControl.endRefreshing()
+    }
+    
     
 }
-
-
-
-

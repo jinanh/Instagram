@@ -25,20 +25,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             })
         )
         
-        // check if user is logged in.
-        if PFUser.current() != nil {
-            let storyboard = UIStoryboard(name: "Main", bundle: nil)
-            // view controller currently being set in Storyboard as default will be overridden
-            window?.rootViewController = storyboard.instantiateViewController(withIdentifier: "mainTabBarViewController")
-        }
-        
-        // handling logout
-        NotificationCenter.default.addObserver(forName: NSNotification.Name(rawValue: "UserDidLogOut" ), object: nil, queue: OperationQueue.main) {(NSNotification)->Void in //the logout button information is received here
+        if let currentUser = PFUser.current() {
+            print("Welcome back \(currentUser.username!) 😀")
+            // TODO: Load Chat view controller and set as root view controller
             
-            print("Inside the change app delegate")
-            let storyBoard = UIStoryboard(name : "Main", bundle: nil)
-            let viewController = storyBoard.instantiateInitialViewController()
-            self.window?.rootViewController = viewController
+            let storyboard = UIStoryboard(name: "Main", bundle: nil)
+            let homefeedViewController = storyboard.instantiateViewController(withIdentifier: "TabBarController")
+            window?.rootViewController = homefeedViewController
             
         }
         return true

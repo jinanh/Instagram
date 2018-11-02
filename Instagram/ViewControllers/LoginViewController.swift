@@ -7,16 +7,12 @@
 //
 
 import UIKit
-
 import Parse
 
 class LoginViewController: UIViewController {
     
     @IBOutlet weak var usernameField: UITextField!
     @IBOutlet weak var passwordField: UITextField!
-    @IBOutlet weak var activityIndicator: UIActivityIndicatorView!
-    
-    
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -29,143 +25,84 @@ class LoginViewController: UIViewController {
         // Dispose of any resources that can be recreated.
     }
     
-    
-    // allows users to sign up
-    func signup(inp_email: String, inp_password : String) {
-        let newUser = PFUser()
+    func displayEmptyAlert(){
+        let alertController = UIAlertController(title: "Empty Username or Password", message: "Please enter your username and password", preferredStyle: .alert)
         
-        newUser.username = inp_email
-        newUser.password = inp_password
+        // create an OK action
+        let OKAction = UIAlertAction(title: "OK", style: .default) { (action) in
+            // handle response here.
+        }
+        // add the OK action to the alert controller
+        alertController.addAction(OKAction)
         
-        newUser.signUpInBackground {(succeeded: Bool, error: Error?)-> Void in
-            if let error = error {
-                let errorString = error.localizedDescription
-                let alertController = UIAlertController(title: "Try again", message: errorString, preferredStyle: .alert)
-                
-                // add ok button
-                let okAction = UIAlertAction(title: "OK", style: .cancel, handler: {
-                    (action) in
-                })
-                
-                alertController.addAction(okAction)
-                
-                // stop activity indicator animation
-                self.activityIndicator.stopAnimating()
-                
-                // Show the errorString somewhere and let the user try again.
-                self.present(alertController, animated: true)
-            } else {
-                // Hooray! Let them use the app now.
-                // create a segue
-                print ("signed up")
-                
-                // stop activity indicator animation
-                self.activityIndicator.stopAnimating()
-                
-                // login the user
-                self.performSegue(withIdentifier: "loginSegue", sender: nil)
-            }
+        DispatchQueue.main.async {
+            self.present(alertController, animated: true, completion: nil)
         }
     }
     
-    
-    
-    
-    
-    // allows users to login
-    func login(inp_username: String, inp_password: String) {
+    func displayExistAlert(){
+        let alertController = UIAlertController(title: "User already existed", message: "Please enter a valid username", preferredStyle: .alert)
         
-        PFUser.logInWithUsername(inBackground: "\(inp_username)", password: "\(inp_password)") { (user: PFUser?, error: Error?) -> Void in
-            if user != nil {
-                print ("logged in")
-                // perform segue
-                print ("logged in")
-                
-                // stop activity indicator animation
-                self.activityIndicator.stopAnimating()
-                
-                // create a segue
-                self.performSegue(withIdentifier: "loginSegue", sender: nil)
-            }
-            else {
-                let errorString = error?.localizedDescription
-                let alertController = UIAlertController(title: "Try again", message: errorString, preferredStyle: .alert)
-                
-                // add ok button
-                let okAction = UIAlertAction(title: "OK", style: .cancel, handler: {
-                    (action) in
-                })
-                
-                alertController.addAction(okAction)
-                
-                // stop activity indicator animation
-                self.activityIndicator.stopAnimating()
-                
-                // Show the errorString somewhere and let the user try again.
-                self.present(alertController, animated: true)
-            }
+        // create an OK action
+        let OKAction = UIAlertAction(title: "OK", style: .default) { (action) in
+            // handle response here.
+        }
+        // add the OK action to the alert controller
+        alertController.addAction(OKAction)
+        
+        DispatchQueue.main.async {
+            self.present(alertController, animated: true, completion: nil)
         }
     }
-    
-    
-    
-    
-    
-    
-    
     
     @IBAction func onSignIn(_ sender: Any) {
-        let username = usernameField.text! as String
-        let password = passwordField.text! as String
+        let username = usernameField.text ?? ""
+        let password = passwordField.text ?? ""
         
-        if username != "" && password != "" {
-            login(inp_username : username, inp_password: password)
-        }
-        else {
-            let alertController = UIAlertController(title: "Empty Username or Password", message: "Username and password cannot be empty. Must provide username for login", preferredStyle: .alert)
-            
-            let okButton = UIAlertAction(title: "OK", style: .cancel, handler: {(action) in
-            })
-            
-            alertController.addAction(okButton)
-            
-            present(alertController, animated: true)
+        
+        PFUser.logInWithUsername(inBackground: usernameField.text!, password: passwordField.text!) { (user: PFUser?, error: Error?) in
+            if let error = error {
+                if username.isEmpty || password.isEmpty{
+                    self.displayEmptyAlert()
+                }
+                print("User log in failed: \(error.localizedDescription)")
+            } else {
+                print("User logged in successfully")
+                // display view controller that needs to shown after successful login
+                self.performSegue(withIdentifier: "loginSegue", sender: nil)
+            }
         }
     }
-    
     
     @IBAction func onSignUp(_ sender: Any) {
-        activityIndicator.startAnimating()
+        let newUser = PFUser()
         
-        let username = usernameField.text! as String
-        let password = passwordField.text! as String
+        newUser.username = usernameField.text
+        newUser.password = passwordField.text
         
-        if username != "" && password != ""{
-            signup(inp_email: username, inp_password: password)
-        }
-        else {
-            let alertController = UIAlertController(title: "Empty Email or Password", message: "Email and password cannot be empty. Must provide Email", preferredStyle: .alert)
-            
-            let okButton = UIAlertAction(title: "OK", style: .cancel, handler: {(action) in
-            })
-            
-            alertController.addAction(okButton)
-            
-            present(alertController, animated: true)
+        newUser.signUpInBackground { (success: Bool, error: Error?) in
+            if let error = error {
+                if (newUser.username?.isEmpty)! || (newUser.password?.isEmpty)!{
+                    self.displayEmptyAlert()
+                }
+                switch error._code{
+                case 202:
+                    self.displayExistAlert()
+                    break
+                    
+                default:
+                    break
+                }
+                print("User register failed: \(error.localizedDescription)")
+            } else {
+                print("User Registered successfully")
+                // manually segue to logged in view
+                self.performSegue(withIdentifier: "loginSegue", sender: nil)
+                
+            }
         }
     }
     
-    
-    
-    /*
-     // MARK: - Navigation
-     
-     // In a storyboard-based application, you will often want to do a little preparation before navigation
-     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
-     // Get the new view controller using segue.destinationViewController.
-     // Pass the selected object to the new view controller.
-     }
-     */
     
 }
 
